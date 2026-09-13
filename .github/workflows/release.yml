@@ -1,0 +1,58 @@
+name: Build & Release macOS App (.dmg)
+
+on:
+  push:
+    tags:
+      - 'v*'
+    branches:
+      - main
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build-and-release:
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout Code
+        uses: actions/checkout@v4
+
+      - name: Make Scripts Executable
+        run: chmod +x build.sh
+
+      - name: Build AntigravityBar.app
+        run: ./build.sh
+
+      - name: Create DMG Disk Image
+        run: |
+          echo "📦 Packaging DMG..."
+          mkdir -p dmg_stage
+          cp -R AntigravityBar.app dmg_stage/
+          ln -s /Applications dmg_stage/Applications
+          
+          hdiutil create -volname "AntigravityBar" \
+                         -srcfolder dmg_stage \
+                         -ov -format UDZO \
+                         AntigravityBar.dmg
+
+      - name: Release Note & Tag Handling
+        id: tag_name
+        run: |
+          if [[ "${GITHUB_REF}" == refs/tags/* ]]; then
+            echo "tag=${GITHUB_REF#refs/tags/}" >> $GITHUB_OUTPUT
+          else
+            echo "tag=v1.0.0-${GITHUB_SHA::7}" >> $GITHUB_OUTPUT
+          fi
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          name: AntigravityBar ${{ steps.tag_name.outputs.tag }}
+          tag_name: ${{ steps.tag_name.outputs.tag }}
+          files: AntigravityBar.dmg
+          draft: false
+          prerelease: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
