@@ -22,20 +22,27 @@ jobs:
       - name: Make Scripts Executable
         run: chmod +x build.sh
 
+      - name: Install Build Tools
+        run: brew install create-dmg
+
       - name: Build aiUsageBar.app
         run: ./build.sh
 
-      - name: Create DMG Disk Image
+      - name: Create Styled DMG Disk Image
         run: |
-          echo "📦 Packaging DMG..."
-          mkdir -p dmg_stage
-          cp -R aiUsageBar.app dmg_stage/
-          ln -s /Applications dmg_stage/Applications
-          
-          hdiutil create -volname "aiUsageBar" \
-                         -srcfolder dmg_stage \
-                         -ov -format UDZO \
-                         aiUsageBar.dmg
+          echo "📦 Packaging Custom Styled DMG..."
+          rm -f aiUsageBar.dmg
+          create-dmg \
+            --volname "aiUsageBar" \
+            --background "assets/dmg_background.png" \
+            --window-pos 200 120 \
+            --window-size 600 300 \
+            --icon-size 100 \
+            --icon "aiUsageBar.app" 150 140 \
+            --hide-extension "aiUsageBar.app" \
+            --app-drop-link 450 140 \
+            "aiUsageBar.dmg" \
+            "aiUsageBar.app"
 
       - name: Release Note & Tag Handling
         id: tag_name

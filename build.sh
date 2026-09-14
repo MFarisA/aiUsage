@@ -11,6 +11,26 @@ rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
 
+# Generate native macOS AppIcon.icns from square 1024x1024 master canvas
+if [ -f "assets/app_icon_master.png" ]; then
+    mkdir -p AppIcon.iconset
+    SRC="assets/app_icon_master.png"
+
+    sips -z 16 16     "$SRC" --out AppIcon.iconset/icon_16x16.png >/dev/null
+    sips -z 32 32     "$SRC" --out AppIcon.iconset/icon_16x16@2x.png >/dev/null
+    sips -z 32 32     "$SRC" --out AppIcon.iconset/icon_32x32.png >/dev/null
+    sips -z 64 64     "$SRC" --out AppIcon.iconset/icon_32x32@2x.png >/dev/null
+    sips -z 128 128   "$SRC" --out AppIcon.iconset/icon_128x128.png >/dev/null
+    sips -z 256 256   "$SRC" --out AppIcon.iconset/icon_128x128@2x.png >/dev/null
+    sips -z 256 256   "$SRC" --out AppIcon.iconset/icon_256x256.png >/dev/null
+    sips -z 512 512   "$SRC" --out AppIcon.iconset/icon_256x256@2x.png >/dev/null
+    sips -z 512 512   "$SRC" --out AppIcon.iconset/icon_512x512.png >/dev/null
+
+    iconutil -c icns AppIcon.iconset -o "$APP_DIR/Contents/Resources/AppIcon.icns"
+    rm -rf AppIcon.iconset
+    cp "$APP_DIR/Contents/Resources/AppIcon.icns" assets/AppIcon.icns 2>/dev/null || true
+fi
+
 # Compile Swift code
 swiftc -O \
     -target arm64-apple-macos12.0 \
@@ -20,12 +40,7 @@ swiftc -O \
     src/main.swift \
     -o "$APP_DIR/Contents/MacOS/$APP_NAME"
 
-# Copy App Icon
-if [ -f "/Users/rebecca/.local/bin/antigravity_logo_52.png" ]; then
-    cp "/Users/rebecca/.local/bin/antigravity_logo_52.png" "$APP_DIR/Contents/Resources/AppIcon.png"
-fi
-
-# Create Info.plist (LSUIElement = true hides Dock icon so it runs purely as a Menu Bar app!)
+# Create Info.plist with CFBundleIconFile
 cat << EOF > "$APP_DIR/Contents/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -33,6 +48,8 @@ cat << EOF > "$APP_DIR/Contents/Info.plist"
 <dict>
     <key>CFBundleExecutable</key>
     <string>$APP_NAME</string>
+    <key>CFBundleIconFile</key>
+    <string>AppIcon</string>
     <key>CFBundleIdentifier</key>
     <string>com.mfarisa.$APP_NAME</string>
     <key>CFBundleName</key>
@@ -49,4 +66,4 @@ cat << EOF > "$APP_DIR/Contents/Info.plist"
 </plist>
 EOF
 
-echo "✅ $APP_NAME.app built successfully!"
+echo "✅ $APP_NAME.app built successfully with native un-distorted AppIcon.icns!"
