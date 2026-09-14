@@ -42,18 +42,25 @@ struct VisualEffectView: NSViewRepresentable {
     }
 }
 
-// MARK: - Usage Manager
+// MARK: - Usage Manager (Single Source of Truth)
 
 class UsageManager: ObservableObject {
+    static let shared = UsageManager()
+    
     @Published var gemini: ModelQuota = ModelQuota(name: "Gemini Models")
     @Published var claude: ModelQuota = ModelQuota(name: "Claude & GPT Models")
     @Published var lastUpdated: String = "Just now"
     @Published var isRefreshing: Bool = false
     @Published var dailyUsages: [DailyUsage] = []
     
+    var onUpdate: (() -> Void)?
+    
     init() {
         generateUsageHistory()
-        fetchData()
+        // Initial instant parse from cache
+        parseCache(filePath: "/tmp/agy_usage.cache")
+        // Trigger fresh fetch in background
+        fetchData(force: false)
     }
     
     func generateUsageHistory() {
@@ -73,23 +80,29 @@ class UsageManager: ObservableObject {
         self.dailyUsages = usages
     }
     
-    func fetchData() {
-        isRefreshing = true
-        DispatchQueue.global(qos: .userInitiated).async {
-            let cacheFile = "/tmp/agy_usage.cache"
-            let fileManager = FileManager.default
-            var needsFetch = true
-            
-            if fileManager.fileExists(atPath: cacheFile) {
-                if let attrs = try? fileManager.attributesOfItem(atPath: cacheFile),
-                   let modDate = attrs[.modificationDate] as? Date {
-                    if Date().timeIntervalSince(modDate) < 300 {
-                        needsFetch = false
-                    }
+    func fetchData(force: Bool = true) {
+        let cacheFile = "/tmp/agy_usage.cache"
+        let fileManager = FileManager.default
+        
+        // 1. Instant parse from existing cache first (0ms delay)
+        parseCache(filePath: cacheFile)
+        
+        var needsFetch = force
+        if !needsFetch && fileManager.fileExists(atPath: cacheFile) {
+            if let attrs = try? fileManager.attributesOfItem(atPath: cacheFile),
+               let modDate = attrs[.modificationDate] as? Date {
+                if Date().timeIntervalSince(modDate) > 120 { // 2 mins TTL
+                    needsFetch = true
                 }
             }
+        } else if !fileManager.fileExists(atPath: cacheFile) {
+            needsFetch = true
+        }
+        
+        if needsFetch {
+            DispatchQueue.main.async { self.isRefreshing = true }
             
-            if needsFetch {
+            DispatchQueue.global(qos: .userInitiated).async {
                 let process = Process()
                 process.executableURL = URL(fileURLWithPath: "/Users/rebecca/.local/bin/agy")
                 process.arguments = ["-p", "/usage"]
@@ -107,9 +120,10 @@ class UsageManager: ObservableObject {
                 } catch {
                     print("Fetch error: \(error)")
                 }
+                
+                // Re-parse fresh cache
+                self.parseCache(filePath: cacheFile)
             }
-            
-            self.parseCache(filePath: cacheFile)
         }
     }
     
@@ -158,6 +172,9 @@ class UsageManager: ObservableObject {
             formatter.dateFormat = "HH:mm:ss"
             self.lastUpdated = "Updated at " + formatter.string(from: Date())
             self.isRefreshing = false
+            
+            // Notify listener (AppDelegate status button)
+            self.onUpdate?()
         }
     }
     
@@ -189,22 +206,22 @@ class UsageManager: ObservableObject {
 // MARK: - Apple Minimalist SwiftUI View
 
 struct ContentView: View {
-    @ObservedObject var manager: UsageManager
+    @ObservedObject var manager = UsageManager.shared
     
     var body: some View {
         ZStack {
-            VisualEffectView(material: .hudWindow, blendingMode: .behindWindow) // Translucent macOS glass
+            VisualEffectView(material: .hudWindow, blendingMode: .behindWindow)
                 .edgesIgnoringSafeArea(.all)
             
             VStack(alignment: .leading, spacing: 14) {
                 // Header
                 HStack {
                     HStack(spacing: 8) {
-                        if let icon = NSImage(contentsOfFile: "/Users/rebecca/.local/bin/antigravity_icon_52.png") {
+                        if let icon = NSImage(contentsOfFile: "/Users/rebecca/.local/bin/antigravity_logo_52.png") {
                             Image(nsImage: icon)
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
-                                .frame(width: 20, height: 20)
+                                .frame(width: 42, height: 28)
                         } else {
                             Image(systemName: "sparkles")
                                 .font(.system(size: 16))
@@ -276,7 +293,7 @@ struct ContentView: View {
                 // Action Footer
                 HStack {
                     Button(action: {
-                        manager.fetchData()
+                        manager.fetchData(force: true)
                     }) {
                         HStack(spacing: 5) {
                             Image(systemName: "arrow.clockwise")
@@ -291,7 +308,7 @@ struct ContentView: View {
                     Spacer()
                     
                     Button(action: {
-                        exit(0) // Direct process exit ensuring 100% reliable Quit
+                        exit(0)
                     }) {
                         HStack(spacing: 4) {
                             Image(systemName: "power")
@@ -401,10 +418,9 @@ class CustomMenuPanel: NSPanel {
 class AppDelegate: NSObject, NSApplicationDelegate {
     var statusItem: NSStatusItem!
     var panel: CustomMenuPanel!
-    var manager = UsageManager()
     
     func applicationDidFinishLaunching(_ notification: Notification) {
-        let hostingView = NSHostingView(rootView: ContentView(manager: manager))
+        let hostingView = NSHostingView(rootView: ContentView(manager: UsageManager.shared))
         hostingView.frame = NSRect(x: 0, y: 0, width: 300, height: 380)
         
         self.panel = CustomMenuPanel(contentView: hostingView)
@@ -412,10 +428,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
         if let button = statusItem.button {
-            button.title = " 91% • 96%"
-            if let icon = NSImage(contentsOfFile: "/Users/rebecca/.local/bin/antigravity_icon_52.png") {
+            if let icon = NSImage(contentsOfFile: "/Users/rebecca/.local/bin/antigravity_logo_52.png") {
                 icon.isTemplate = true
-                icon.size = NSSize(width: 16, height: 16)
+                icon.size = NSSize(width: 32, height: 21)
                 button.image = icon
             } else {
                 button.image = NSImage(systemSymbolName: "sparkles", accessibilityDescription: "Antigravity")
@@ -424,10 +439,28 @@ class AppDelegate: NSObject, NSApplicationDelegate {
             button.target = self
         }
         
+        // Listen for Manager updates to keep Status Item title 100% synchronized!
+        UsageManager.shared.onUpdate = { [weak self] in
+            self?.updateStatusButtonTitle()
+        }
+        
+        // Initial title sync
+        updateStatusButtonTitle()
+        
         NSEvent.addGlobalMonitorForEvents(matching: [.leftMouseDown, .rightMouseDown]) { [weak self] _ in
             if self?.panel.isVisible == true {
                 self?.panel.orderOut(nil)
             }
+        }
+    }
+    
+    func updateStatusButtonTitle() {
+        guard let button = statusItem.button else { return }
+        let manager = UsageManager.shared
+        if let g5h = manager.gemini.fiveHour, let gWk = manager.gemini.weekly {
+            button.title = " \(g5h.remainingPct)% • \(gWk.remainingPct)%"
+        } else {
+            button.title = " --% • --%"
         }
     }
     
@@ -437,6 +470,9 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         if panel.isVisible {
             panel.orderOut(nil)
         } else {
+            // Trigger background fetch if cache is stale
+            UsageManager.shared.fetchData(force: false)
+            
             let buttonFrame = window.convertToScreen(button.frame)
             let panelSize = panel.frame.size
             

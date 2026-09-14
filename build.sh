@@ -21,8 +21,8 @@ swiftc -O \
     -o "$APP_DIR/Contents/MacOS/$APP_NAME"
 
 # Copy Icon if exists
-if [ -f "/Users/rebecca/.local/bin/antigravity_icon_52.png" ]; then
-    cp "/Users/rebecca/.local/bin/antigravity_icon_52.png" "$APP_DIR/Contents/Resources/AppIcon.png"
+if [ -f "/Users/rebecca/.local/bin/antigravity_logo_52.png" ]; then
+    cp "/Users/rebecca/.local/bin/antigravity_logo_52.png" "$APP_DIR/Contents/Resources/AppIcon.png"
 fi
 
 # Create Info.plist (LSUIElement = true hides Dock icon so it runs purely as a Menu Bar app!)
