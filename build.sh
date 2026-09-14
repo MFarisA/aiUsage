@@ -66,4 +66,7 @@ cat << EOF > "$APP_DIR/Contents/Info.plist"
 </plist>
 EOF
 
+echo "🔐 Ad-hoc code signing $APP_NAME.app..."
+codesign --force --deep --sign - "$APP_DIR"
+
 echo "✅ $APP_NAME.app built successfully with native un-distorted AppIcon.icns!"
