@@ -22,20 +22,20 @@ jobs:
       - name: Make Scripts Executable
         run: chmod +x build.sh
 
-      - name: Build AntigravityBar.app
+      - name: Build aiUsageBar.app
         run: ./build.sh
 
       - name: Create DMG Disk Image
         run: |
           echo "📦 Packaging DMG..."
           mkdir -p dmg_stage
-          cp -R AntigravityBar.app dmg_stage/
+          cp -R aiUsageBar.app dmg_stage/
           ln -s /Applications dmg_stage/Applications
           
-          hdiutil create -volname "AntigravityBar" \
+          hdiutil create -volname "aiUsageBar" \
                          -srcfolder dmg_stage \
                          -ov -format UDZO \
-                         AntigravityBar.dmg
+                         aiUsageBar.dmg
 
       - name: Release Note & Tag Handling
         id: tag_name
@@ -49,9 +49,9 @@ jobs:
       - name: Create GitHub Release
         uses: softprops/action-gh-release@v2
         with:
-          name: AntigravityBar ${{ steps.tag_name.outputs.tag }}
+          name: aiUsageBar ${{ steps.tag_name.outputs.tag }}
           tag_name: ${{ steps.tag_name.outputs.tag }}
-          files: AntigravityBar.dmg
+          files: aiUsageBar.dmg
           draft: false
           prerelease: false
         env:

@@ -1,7 +1,7 @@
 #!/bin/bash
 set -e
 
-APP_NAME="AntigravityBar"
+APP_NAME="aiUsageBar"
 APP_DIR="$APP_NAME.app"
 
 echo "🔨 Building $APP_NAME native macOS SwiftUI application..."
@@ -20,27 +20,27 @@ swiftc -O \
     src/main.swift \
     -o "$APP_DIR/Contents/MacOS/$APP_NAME"
 
-# Copy Icon if exists
+# Copy App Icon
 if [ -f "/Users/rebecca/.local/bin/antigravity_logo_52.png" ]; then
     cp "/Users/rebecca/.local/bin/antigravity_logo_52.png" "$APP_DIR/Contents/Resources/AppIcon.png"
 fi
 
 # Create Info.plist (LSUIElement = true hides Dock icon so it runs purely as a Menu Bar app!)
-cat << 'EOF' > "$APP_DIR/Contents/Info.plist"
+cat << EOF > "$APP_DIR/Contents/Info.plist"
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
 <plist version="1.0">
 <dict>
     <key>CFBundleExecutable</key>
-    <string>AntigravityBar</string>
+    <string>$APP_NAME</string>
     <key>CFBundleIdentifier</key>
-    <string>com.rebecca.AntigravityBar</string>
+    <string>com.mfarisa.$APP_NAME</string>
     <key>CFBundleName</key>
-    <string>AntigravityBar</string>
+    <string>$APP_NAME</string>
     <key>CFBundlePackageType</key>
     <string>APPL</string>
     <key>CFBundleShortVersionString</key>
-    <string>1.0</string>
+    <string>1.0.0</string>
     <key>LSUIElement</key>
     <true/>
     <key>LSMinimumSystemVersion</key>
