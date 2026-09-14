@@ -14,9 +14,23 @@ A 100% native macOS Menu Bar application built with **Swift & SwiftUI** for trac
 
 ---
 
-## 💾 Installation
+## 🍺 Installation via Homebrew Cask
 
-### Download Ready-to-use `.dmg` Installer
+Install directly from your Mac terminal in 1 command:
+
+```bash
+brew tap MFarisA/tap
+brew install --cask aiusagebar
+```
+
+To update in the future:
+```bash
+brew upgrade aiusagebar
+```
+
+---
+
+## 💾 Alternative: Manual `.dmg` Download
 
 1. Go to [GitHub Releases](https://github.com/MFarisA/aiUsage/releases).
 2. Download the latest `aiUsageBar.dmg`.
@@ -41,7 +55,7 @@ open aiUsageBar.app
 This repository includes `.github/workflows/release.yml`. Whenever code is pushed to `main` or a new tag (`v1.0.0`) is created:
 1. GitHub Actions spins up a macOS runner.
 2. Compiles `aiUsageBar.app` using `swiftc`.
-3. Packages a native `aiUsageBar.dmg` disk image with a drag-and-drop link to `/Applications`.
+3. Packages a custom styled `aiUsageBar.dmg` disk image with a drag-and-drop link to `/Applications`.
 4. Automatically publishes `aiUsageBar.dmg` to the GitHub Releases page!
 
 ---
