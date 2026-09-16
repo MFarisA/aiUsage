@@ -112,6 +112,7 @@ class UsageManager: ObservableObject {
     @Published var isRefreshing: Bool = false
     @Published var dailyUsages: [DailyUsage] = []
     
+    private var timer: Timer?
     var onUpdate: (() -> Void)?
     
     init() {
@@ -120,6 +121,17 @@ class UsageManager: ObservableObject {
         parseCache(filePath: getCacheFilePath())
         // Trigger fresh fetch in background
         fetchData(force: false)
+        // Start seamless background auto-refresh timer (every 30 seconds)
+        startAutoRefreshTimer()
+    }
+    
+    func startAutoRefreshTimer() {
+        timer?.invalidate()
+        let t = Timer(timeInterval: 30.0, repeats: true) { [weak self] _ in
+            self?.fetchData(force: true)
+        }
+        RunLoop.main.add(t, forMode: .common)
+        self.timer = t
     }
     
     func generateUsageHistory() {
@@ -150,7 +162,7 @@ class UsageManager: ObservableObject {
         if !needsFetch && fileManager.fileExists(atPath: cacheFile) {
             if let attrs = try? fileManager.attributesOfItem(atPath: cacheFile),
                let modDate = attrs[.modificationDate] as? Date {
-                if Date().timeIntervalSince(modDate) > 120 { // 2 mins TTL
+                if Date().timeIntervalSince(modDate) > 30 { // 30s TTL
                     needsFetch = true
                 }
             }
