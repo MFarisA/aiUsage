@@ -11,6 +11,11 @@ rm -rf "$APP_DIR"
 mkdir -p "$APP_DIR/Contents/MacOS"
 mkdir -p "$APP_DIR/Contents/Resources"
 
+# Copy logo resource into bundle
+if [ -f "assets/antigravity_logo_52.png" ]; then
+    cp assets/antigravity_logo_52.png "$APP_DIR/Contents/Resources/"
+fi
+
 # Generate native macOS AppIcon.icns from square 1024x1024 master canvas
 if [ -f "assets/app_icon_master.png" ]; then
     mkdir -p AppIcon.iconset

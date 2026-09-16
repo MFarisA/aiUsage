@@ -2,6 +2,65 @@ import SwiftUI
 import AppKit
 import Foundation
 
+// MARK: - Helpers & Path Resolution
+
+func findAgyExecutable() -> String? {
+    let fileManager = FileManager.default
+    let homeDir = fileManager.homeDirectoryForCurrentUser.path
+    
+    let candidatePaths = [
+        "\(homeDir)/.local/bin/agy",
+        "/opt/homebrew/bin/agy",
+        "/usr/local/bin/agy",
+        "/usr/bin/agy",
+        "\(homeDir)/.bin/agy",
+        "\(homeDir)/bin/agy"
+    ]
+    
+    for path in candidatePaths {
+        if fileManager.isExecutableFile(atPath: path) {
+            return path
+        }
+    }
+    
+    // Fallback: search via zsh interactive login shell
+    let process = Process()
+    process.executableURL = URL(fileURLWithPath: "/bin/zsh")
+    process.arguments = ["-l", "-c", "which agy"]
+    let pipe = Pipe()
+    process.standardOutput = pipe
+    process.standardError = FileHandle.nullDevice
+    do {
+        try process.run()
+        process.waitUntilExit()
+        let data = pipe.fileHandleForReading.readDataToEndOfFile()
+        if let path = String(data: data, encoding: .utf8)?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !path.isEmpty && fileManager.isExecutableFile(atPath: path) {
+            return path
+        }
+    } catch {}
+    
+    return nil
+}
+
+func getCacheFilePath() -> String {
+    return FileManager.default.temporaryDirectory.appendingPathComponent("agy_usage.cache").path
+}
+
+func getAntigravityLogo() -> NSImage? {
+    // 1. Try inside App Bundle Resources
+    if let bundlePath = Bundle.main.path(forResource: "antigravity_logo_52", ofType: "png"),
+       let img = NSImage(contentsOfFile: bundlePath) {
+        return img
+    }
+    // 2. Fallback to ~/.local/bin/antigravity_logo_52.png
+    let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+    if let img = NSImage(contentsOfFile: "\(homeDir)/.local/bin/antigravity_logo_52.png") {
+        return img
+    }
+    return nil
+}
+
 // MARK: - Data Models
 
 struct LimitInfo {
@@ -58,7 +117,7 @@ class UsageManager: ObservableObject {
     init() {
         generateUsageHistory()
         // Initial instant parse from cache
-        parseCache(filePath: "/tmp/agy_usage.cache")
+        parseCache(filePath: getCacheFilePath())
         // Trigger fresh fetch in background
         fetchData(force: false)
     }
@@ -81,7 +140,7 @@ class UsageManager: ObservableObject {
     }
     
     func fetchData(force: Bool = true) {
-        let cacheFile = "/tmp/agy_usage.cache"
+        let cacheFile = getCacheFilePath()
         let fileManager = FileManager.default
         
         // 1. Instant parse from existing cache first (0ms delay)
@@ -103,9 +162,21 @@ class UsageManager: ObservableObject {
             DispatchQueue.main.async { self.isRefreshing = true }
             
             DispatchQueue.global(qos: .userInitiated).async {
+                guard let agyPath = findAgyExecutable() else {
+                    print("Fetch error: agy executable not found")
+                    DispatchQueue.main.async { self.isRefreshing = false }
+                    return
+                }
+                
                 let process = Process()
-                process.executableURL = URL(fileURLWithPath: "/Users/rebecca/.local/bin/agy")
+                process.executableURL = URL(fileURLWithPath: agyPath)
                 process.arguments = ["-p", "/usage"]
+                
+                var env = ProcessInfo.processInfo.environment
+                let homeDir = fileManager.homeDirectoryForCurrentUser.path
+                let currentPath = env["PATH"] ?? ""
+                env["PATH"] = "\(homeDir)/.local/bin:/opt/homebrew/bin:/usr/local/bin:\(currentPath)"
+                process.environment = env
                 
                 let pipe = Pipe()
                 process.standardOutput = pipe
@@ -217,7 +288,7 @@ struct ContentView: View {
                 // Header
                 HStack {
                     HStack(spacing: 8) {
-                        if let icon = NSImage(contentsOfFile: "/Users/rebecca/.local/bin/antigravity_logo_52.png") {
+                        if let icon = getAntigravityLogo() {
                             Image(nsImage: icon)
                                 .resizable()
                                 .aspectRatio(contentMode: .fit)
@@ -353,6 +424,8 @@ struct ModelQuotaView: View {
     }
 }
 
+// MARK: - Quota Row View
+
 struct QuotaRow: View {
     let label: String
     let limit: LimitInfo
@@ -428,7 +501,7 @@ class AppDelegate: NSObject, NSApplicationDelegate {
         statusItem = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
         
         if let button = statusItem.button {
-            if let icon = NSImage(contentsOfFile: "/Users/rebecca/.local/bin/antigravity_logo_52.png") {
+            if let icon = getAntigravityLogo() {
                 icon.isTemplate = true
                 icon.size = NSSize(width: 32, height: 21)
                 button.image = icon
