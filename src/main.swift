@@ -61,6 +61,43 @@ func getAntigravityLogo() -> NSImage? {
     return nil
 }
 
+// MARK: - Local File System Directory Watcher
+
+class DirectoryWatcher {
+    private var fileDescriptor: Int32 = -1
+    private var source: DispatchSourceFileSystemObject?
+    var onChange: (() -> Void)?
+
+    func start(path: String) {
+        fileDescriptor = open(path, O_EVTONLY)
+        guard fileDescriptor != -1 else { return }
+
+        source = DispatchSource.makeFileSystemObjectSource(
+            fileDescriptor: fileDescriptor,
+            eventMask: [.write, .extend, .attrib, .link, .rename, .revoke],
+            queue: DispatchQueue.global(qos: .utility)
+        )
+
+        source?.setEventHandler { [weak self] in
+            DispatchQueue.main.async {
+                self?.onChange?()
+            }
+        }
+
+        source?.setCancelHandler { [weak self] in
+            if let fd = self?.fileDescriptor, fd != -1 {
+                close(fd)
+            }
+        }
+
+        source?.resume()
+    }
+
+    deinit {
+        source?.cancel()
+    }
+}
+
 // MARK: - Data Models
 
 struct LimitInfo {
@@ -113,6 +150,8 @@ class UsageManager: ObservableObject {
     @Published var dailyUsages: [DailyUsage] = []
     
     private var timer: Timer?
+    private var watchers: [DirectoryWatcher] = []
+    private var debounceWorkItem: DispatchWorkItem?
     var onUpdate: (() -> Void)?
     
     init() {
@@ -121,8 +160,10 @@ class UsageManager: ObservableObject {
         parseCache(filePath: getCacheFilePath())
         // Trigger fresh fetch in background
         fetchData(force: false)
-        // Start seamless background auto-refresh timer (every 30 seconds)
+        // Start background auto-refresh timer (every 30 seconds)
         startAutoRefreshTimer()
+        // Watch local ~/.gemini directory for real-time prompt activity triggers!
+        setupFileWatcher()
     }
     
     func startAutoRefreshTimer() {
@@ -132,6 +173,36 @@ class UsageManager: ObservableObject {
         }
         RunLoop.main.add(t, forMode: .common)
         self.timer = t
+    }
+    
+    private func setupFileWatcher() {
+        let homeDir = FileManager.default.homeDirectoryForCurrentUser.path
+        let targetPaths = [
+            "\(homeDir)/.gemini/antigravity-cli",
+            "\(homeDir)/.gemini/antigravity",
+            "\(homeDir)/.gemini/history"
+        ]
+        
+        for path in targetPaths {
+            if FileManager.default.fileExists(atPath: path) {
+                let watcher = DirectoryWatcher()
+                watcher.onChange = { [weak self] in
+                    self?.triggerDebouncedFetch()
+                }
+                watcher.start(path: path)
+                self.watchers.append(watcher)
+            }
+        }
+    }
+    
+    private func triggerDebouncedFetch() {
+        debounceWorkItem?.cancel()
+        let item = DispatchWorkItem { [weak self] in
+            self?.fetchData(force: true)
+        }
+        debounceWorkItem = item
+        // Wait 2.0s after user AI activity finishes before fetching updated quota from server
+        DispatchQueue.main.asyncAfter(deadline: .now() + 2.0, execute: item)
     }
     
     func generateUsageHistory() {
